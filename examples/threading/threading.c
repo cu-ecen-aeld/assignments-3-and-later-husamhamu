@@ -14,6 +14,40 @@ void* threadfunc(void* thread_param)
     // TODO: wait, obtain mutex, wait, release mutex as described by thread_data structure
     // hint: use a cast like the one below to obtain thread arguments from your parameter
     //struct thread_data* thread_func_args = (struct thread_data *) thread_param;
+    
+    struct thread_data* thread_func_args = (struct thread_data*)thread_param;
+
+    // Validate arguments
+    if (!thread_func_args) {
+        ERROR_LOG("Thread function received null arguments");
+        pthread_exit(NULL);
+    }
+
+    // Step 1: Wait before obtaining the mutex
+    usleep(thread_func_args->wait_to_obtain_ms * 1000);
+
+    // Step 2: Attempt to lock the mutex
+    if (pthread_mutex_lock(thread_func_args->mutex) != 0) {
+        ERROR_LOG("Failed to lock mutex");
+        thread_func_args->thread_complete_success = false;
+        pthread_exit(thread_func_args);
+    }
+
+    // Step 3: Hold the mutex for the specified duration
+    usleep(thread_func_args->wait_to_release_ms * 1000);
+
+    // Step 4: Unlock the mutex
+    if (pthread_mutex_unlock(thread_func_args->mutex) != 0) {
+        ERROR_LOG("Failed to unlock mutex");
+        thread_func_args->thread_complete_success = false;
+        pthread_exit(thread_func_args);
+    }
+
+    // Step 5: Indicate success
+    thread_func_args->thread_complete_success = true;
+
+    // Exit and return the thread data structure
+    pthread_exit(thread_func_args);
     return thread_param;
 }
 
@@ -28,6 +62,28 @@ bool start_thread_obtaining_mutex(pthread_t *thread, pthread_mutex_t *mutex,int 
      *
      * See implementation details in threading.h file comment block
      */
-    return false;
+
+    // Allocate memory for the thread data structure
+    struct thread_data* thread_data_ptr = malloc(sizeof(struct thread_data));
+    if (!thread_data_ptr) {
+        ERROR_LOG("Failed to allocate memory for thread data");
+        return false;
+    }
+
+    // Initialize the thread data structure
+    thread_data_ptr->mutex = mutex;
+    thread_data_ptr->wait_to_obtain_ms = wait_to_obtain_ms;
+    thread_data_ptr->wait_to_release_ms = wait_to_release_ms;
+    thread_data_ptr->thread_complete_success = false;
+
+    // Create the thread
+    if (pthread_create(thread, NULL, threadfunc, (void*)thread_data_ptr) != 0) {
+        ERROR_LOG("Failed to create thread");
+        free(thread_data_ptr);
+        return false;
+    }
+
+    DEBUG_LOG("Thread successfully created");
+    return true;
 }
 
